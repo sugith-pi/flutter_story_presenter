@@ -29,14 +29,34 @@ class MainApp extends StatelessWidget {
   }
 }
 
-class Home extends StatefulWidget {
+class Home extends StatelessWidget {
   const Home({super.key});
 
   @override
-  State<Home> createState() => _HomeState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: ElevatedButton(
+          onPressed: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (context) => const WatchStories(),
+            ));
+          },
+          child: const Text("Click Me"),
+        ),
+      ),
+    );
+  }
 }
 
-class _HomeState extends State<Home> {
+class WatchStories extends StatefulWidget {
+  const WatchStories({super.key});
+
+  @override
+  State<WatchStories> createState() => _WatchStoriesState();
+}
+
+class _WatchStoriesState extends State<WatchStories> {
   PageController pageController = PageController();
   double currentPageValue = 0.0;
 
