@@ -38,6 +38,7 @@ class VideoStoryView extends StatefulWidget {
 class _VideoStoryViewState extends State<VideoStoryView> {
   VideoPlayerController? controller;
   VideoStatus videoStatus = VideoStatus.loading;
+  bool _isDisposed = false;
 
   @override
   void initState() {
@@ -104,6 +105,7 @@ class _VideoStoryViewState extends State<VideoStoryView> {
 
   @override
   void dispose() {
+    _isDisposed = true;
     if (videoStatus.isLive) {
       controller?.removeListener(videoListener);
       controller?.dispose();
@@ -118,6 +120,9 @@ class _VideoStoryViewState extends State<VideoStoryView> {
     return VisibilityDetector(
       key: UniqueKey(),
       onVisibilityChanged: (info) {
+        // Don't call callbacks if widget is disposed or controller is null
+        if (_isDisposed || !mounted) return;
+
         if (info.visibleFraction == 1) {
           widget.onVisibilityChanged?.call(controller, true);
         } else if (info.visibleFraction == 0) {

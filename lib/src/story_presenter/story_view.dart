@@ -144,6 +144,20 @@ class _StoryPresenterState extends State<StoryPresenter>
   late final StoryController _storyController;
   late final PageController pageController;
 
+  /// Safely executes a video player operation
+  Future<void> _safeVideoPlayerOperation(
+      Future<void> Function(VideoPlayerController controller) operation) async {
+    if (!mounted) return;
+    final player = _currentVideoPlayer;
+    if (player == null) return;
+    try {
+      await operation(player);
+    } catch (e) {
+      // Controller might be disposed, ignore the error
+      debugPrint('VideoPlayer operation failed (possibly disposed): $e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -216,15 +230,19 @@ class _StoryPresenterState extends State<StoryPresenter>
 
   /// Listener for the story controller to handle various story actions.
   void _storyControllerListener() {
+    if (!mounted) return;
+
     /// Resumes the media playback.
     void resumeMedia() {
-      _currentVideoPlayer?.play();
+      if (!mounted) return;
+      _safeVideoPlayerOperation((controller) async => controller.play());
       _forwardAnimation(from: _animationController.value);
     }
 
     /// Pauses the media playback.
     void pauseMedia() {
-      _currentVideoPlayer?.pause();
+      if (!mounted) return;
+      _safeVideoPlayerOperation((controller) async => controller.pause());
       _animationController.stop(canceled: false);
     }
 
@@ -250,14 +268,15 @@ class _StoryPresenterState extends State<StoryPresenter>
 
     /// Toggles mute/unmute for the media.
     void toggleMuteUnMuteMedia() {
-      if (_currentVideoPlayer != null) {
-        final videoPlayerValue = _currentVideoPlayer!.value;
+      if (!mounted) return;
+      _safeVideoPlayerOperation((controller) async {
+        final videoPlayerValue = controller.value;
         if (videoPlayerValue.volume == 1) {
-          _currentVideoPlayer!.setVolume(0);
+          await controller.setVolume(0);
         } else {
-          _currentVideoPlayer!.setVolume(1);
+          await controller.setVolume(1);
         }
-      }
+      });
     }
 
     final storyStatus = _storyController.storyStatus;
@@ -317,8 +336,11 @@ class _StoryPresenterState extends State<StoryPresenter>
       physics: const NeverScrollableScrollPhysics(),
       onPageChanged: (index) {
         _resetAnimation();
-        _currentVideoPlayer?.pause();
-        _currentVideoPlayer?.seekTo(Duration.zero);
+        // Safely pause and reset the video player before clearing reference
+        _safeVideoPlayerOperation((controller) async {
+          await controller.pause();
+          await controller.seekTo(Duration.zero);
+        });
         _currentVideoPlayer = null;
 
         widget.onStoryChanged?.call(index);
@@ -373,17 +395,41 @@ class _StoryPresenterState extends State<StoryPresenter>
           key: UniqueKey(),
           looping: false,
           onVisibilityChanged: (videoPlayer, isvisible) async {
-            if (videoPlayer?.value.isInitialized == true) {
+            // Early return if widget is disposed
+            if (!mounted) return;
+
+            // Helper to safely check if video player is initialized and not disposed
+            bool isPlayerValid(VideoPlayerController? player) {
+              if (player == null) return false;
+              try {
+                return player.value.isInitialized;
+              } catch (e) {
+                // Controller might be disposed
+                return false;
+              }
+            }
+
+            if (isPlayerValid(videoPlayer)) {
               if (isvisible) {
                 _currentVideoPlayer = videoPlayer;
                 if (_storyController.storyStatus != StoryAction.pause) {
-                  await videoPlayer!.play();
-                  _startStoryCountdown(videoPlayer.value.duration);
+                  try {
+                    if (!mounted) return;
+                    await videoPlayer!.play();
+                    if (!mounted) return;
+                    _startStoryCountdown(videoPlayer.value.duration);
+                  } catch (e) {
+                    debugPrint('Video play failed (possibly disposed): $e');
+                  }
                 }
               } else {
                 _currentVideoPlayer = null;
-                videoPlayer?.pause();
-                videoPlayer?.seekTo(Duration.zero);
+                try {
+                  await videoPlayer?.pause();
+                  await videoPlayer?.seekTo(Duration.zero);
+                } catch (e) {
+                  debugPrint('Video pause failed (possibly disposed): $e');
+                }
               }
             } else {
               _currentVideoPlayer = null;
